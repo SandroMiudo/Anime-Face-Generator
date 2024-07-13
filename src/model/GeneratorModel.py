@@ -1,9 +1,16 @@
 from keras import models
 from keras import layers
+import tensorflow as tf
+
+
 
 class GeneratorModel(models.Model):
-    def __init__(self, input_shape:tuple[int,int,int], higher_images_resolution=True):
+    """
+    input_shape : size of the noise vector -> defaults to 164
+    """
+    def __init__(self, input_shape:int=164, higher_images_resolution=True):
         super().__init__()
+        self.noise_vector_shape = input_shape
         self.higher_images_resolution = higher_images_resolution
         self.input_layer = layers.Input(input_shape)
         self.dense_layer_1 = layers.Dense(8*8*256, use_bias=False)
@@ -33,3 +40,33 @@ class GeneratorModel(models.Model):
         else: # (64,64)
             self.conv_layer3 = layers.Conv2DTranspose(3, (5, 5), strides=(4, 4), padding='same', use_bias=False, activation='tanh')
             assert self.output_shape == (None, 64, 64, 3)
+
+    def compute_loss(self, gen_images_output):
+        fake_images_true_value = tf.ones_like(gen_images_output)
+        return self.loss(fake_images_true_value, gen_images_output)
+    
+    def get_noise_vector_shape(self):
+        return self.noise_vector_shape
+
+    def call(self, inputs, training=None):
+        x = self.input_layer(inputs)
+        x = self.dense_layer_1(x, training)
+        x = self.batch_normalize_layer_1(x, training)
+        x = self.leaky_relu_1(x, training)
+        x = self.reshape_layer_1(x, training)
+        x = self.conv_layer_1(x, training)
+        x = self.batch_normalize_layer_2(x, training)
+        x = self.leaky_relu_2(x, training)
+        x = self.conv_layer_2(x, training)
+        x = self.batch_normalize_layer_3(x, training)
+        x = self.leaky_relu_3(x, training)
+        if(self.higher_images_resolution):
+            x = self.conv_layer_3(x, training)
+            x = self.batch_normalize_layer_4(x, training)
+            x = self.leaky_relu_4(x, training)
+            x = self.conv_layer_4(x, training)
+        else:
+            x = self.conv_layer3(x, training)
+    
+    def apply_grads(self, gen_grads):
+        self.optimizer.apply_gradients(zip(gen_grads, self.trainable_variables))
