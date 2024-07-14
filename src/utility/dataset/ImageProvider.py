@@ -18,12 +18,6 @@ class ImageProvider:
         return (img - 127.5) / 127.5
 
     @staticmethod
-    def convert_to_tensor_image(dataset_file_path):
-        img        = io.read_file(dataset_file_path)
-        tensor_image = io.decode_image(img, 3, dtype=dtypes.float16)
-        return image.resize(tensor_image, [ImageProvider.IMG_HEIGHT, ImageProvider.IMG_WIDTH])
-
-    @staticmethod
     def scale_image(image): 
         return ImageProvider.normalize_function_used(image)    
 
@@ -49,19 +43,25 @@ class ImageProvider:
             Warning("Batch size shouldn't be set to low.")
         if(batch_size > 128 or batch_size < 2):
             print(f"Batch size has to be in range : [2-128], but received {batch_size}")
-        dataset = data.Dataset.list_files("../../dataset/*")
+        dataset = data.Dataset.list_files("dataset/*")
         self.dataset = dataset
         self.batch_size = batch_size
         print(f"{dataset.cardinality()} Images found --\n")
         print("Preprocess data : order --\n")
         print("Converting images to tensors --\n")
-        dataset = dataset.map(lambda x : ImageProvider.convert_to_tensor_image(x))
+
+        def convert_to_tensor_image(dataset_file_path):
+            img          = io.read_file(dataset_file_path)
+            tensor_image = io.decode_jpeg(img, channels=3)
+            return image.resize(tensor_image, [ImageProvider.IMG_HEIGHT, ImageProvider.IMG_WIDTH])
+
+        self.dataset = self.dataset.map(convert_to_tensor_image)
         print(f"Normalizing images using {ImageProvider.normalize_function_used} --\n")
-        dataset = dataset.map(lambda x : ImageProvider.normalize_function_used(x))
+        self.dataset = self.dataset.map(lambda x : ImageProvider.normalize_function_used(x))
         print(f"Shuffling images using a buffer size of {shuffle_buffer} -- random order\n")
-        dataset = dataset.shuffle(shuffle_buffer)
+        self.dataset = self.dataset.shuffle(shuffle_buffer)
         print(f"Creating batches of size {batch_size} --\n")
-        dataset = dataset.batch(batch_size, drop_remainder=True)
+        self.dataset = self.dataset.batch(batch_size, drop_remainder=True)
         if(should_cache):
             print("Caching images --\n")
             dataset = dataset.cache()
