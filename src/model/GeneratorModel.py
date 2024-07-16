@@ -4,34 +4,36 @@ import tensorflow as tf
 
 class GeneratorModel(models.Model):
     """
-    input_shape : size of the noise vector -> defaults to 164
+    input_shape : size of the noise vector -> defaults to 256
     """
-    def __init__(self, i_shape:int=164, higher_images_resolution=True):
+    def __init__(self, i_shape:int=128, higher_images_resolution=True):
         super().__init__()
         self.noise_vector_shape = i_shape
         self.higher_images_resolution = higher_images_resolution
-        self.dense_layer_1 = layers.Dense(8*8*256, use_bias=False, 
-            input_shape=i_shape)
-        self.batch_normalize_layer_1 = layers.BatchNormalization()
+        self.dense_layer_1 = layers.Dense(8*8*i_shape, input_shape=i_shape)
+
+        self.reshape_layer_1 = layers.Reshape((8, 8, i_shape))
+        self.dropout_layer_1 = layers.Dropout(rate=0.3)
+
+        self.conv_layer_1 = layers.Conv2DTranspose(256, (2, 2), strides=(2,2), padding='same')
         self.leaky_relu_1 = layers.LeakyReLU()
+        self.batch_normalize_layer_1 = layers.BatchNormalization()
 
-        self.reshape_layer_1 = layers.Reshape((8, 8, 256))
-
-        self.conv_layer_1 = layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False)
-        self.batch_normalize_layer_2 = layers.BatchNormalization()
+        self.conv_layer_1_5 = layers.Conv2DTranspose(128, (2, 2), strides=(2,2), padding='same')
         self.leaky_relu_2 = layers.LeakyReLU()
 
-        self.conv_layer_2 = layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False)
-        self.batch_normalize_layer_3 = layers.BatchNormalization()
+        self.dropout_layer_2 = layers.Dropout(rate=0.3)
+
+        self.conv_layer_2 = layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same')
         self.leaky_relu_3 = layers.LeakyReLU()
+        self.batch_normalize_layer_2 = layers.BatchNormalization()
 
         if higher_images_resolution: # (128,128)
-            self.conv_layer_3 = layers.Conv2DTranspose(32, (5, 5), strides=(4, 4), padding='same', use_bias=False)
-            self.batch_normalize_layer_4 = layers.BatchNormalization()
+            self.conv_layer_3 = layers.Conv2DTranspose(32, (4, 4), strides=(4, 4), padding='same')
             self.leaky_relu_4 = layers.LeakyReLU()
-            self.conv_layer_4 = layers.Conv2DTranspose(3, (5,5), strides=(2,2), padding='same', use_bias=False, activation='tanh')
+            self.conv_layer_4 = layers.Conv2D(3, (4,4), strides=(2,2), padding='same', activation='sigmoid')
         else: # (64,64)
-            self.conv_layer3 = layers.Conv2DTranspose(3, (5, 5), strides=(4, 4), padding='same', use_bias=False, activation='tanh')
+            self.conv_layer3 = layers.Conv2D(3, (4, 4), strides=(1,1), padding='same', activation='sigmoid')
 
     def compute_loss(self, gen_images_output):
         fake_images_true_value = tf.ones_like(gen_images_output)
@@ -42,18 +44,20 @@ class GeneratorModel(models.Model):
 
     def call(self, inputs, training=None):
         x = self.dense_layer_1(inputs, training=training)
-        x = self.batch_normalize_layer_1(x, training=training)
-        x = self.leaky_relu_1(x, training=training)
         x = self.reshape_layer_1(x, training=training)
+        x = self.dropout_layer_1(x, training=training)
         x = self.conv_layer_1(x, training=training)
-        x = self.batch_normalize_layer_2(x, training=training)
+        x = self.leaky_relu_1(x, training=training)
+        x = self.batch_normalize_layer_1(x, training=training)
+        x = self.conv_layer_1_5(x, training=training)
         x = self.leaky_relu_2(x, training=training)
+        x = self.dropout_layer_2(x, training=training)
         x = self.conv_layer_2(x, training=training)
-        x = self.batch_normalize_layer_3(x, training=training)
         x = self.leaky_relu_3(x, training=training)
+        x = self.batch_normalize_layer_2(x, training=training)
+
         if(self.higher_images_resolution):
             x = self.conv_layer_3(x, training=training)
-            x = self.batch_normalize_layer_4(x, training=training)
             x = self.leaky_relu_4(x, training=training)
             x = self.conv_layer_4(x, training=training)
         else:

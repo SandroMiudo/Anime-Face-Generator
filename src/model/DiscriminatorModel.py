@@ -6,15 +6,18 @@ class DiscriminatorModel(models.Model):
 
     def __init__(self, i_shape:tuple[int,int,int]):
         super().__init__()
-        self.conv_layer_1 = layers.Conv2D(filters=64, kernel_size=(5,5), strides=(2,2),
-            input_shape=i_shape)
+        self.conv_layer_1 = layers.Conv2D(filters=16, kernel_size=(3,3), padding='same', 
+            activation='relu', input_shape=i_shape)
         self.i_shape = i_shape
-        self.leaky_relu_1 = layers.LeakyReLU()
-        self.dropout_layer_1 = layers.Dropout(rate=0.3) # rate at which input will be replaced by 0
-        self.conv_layer_2 = layers.Conv2D(filters=128, kernel_size=(5,5), strides=(2,2)) 
-        self.leaky_relu_2 = layers.LeakyReLU()
-        self.dropout_layer_2 = layers.Dropout(rate=0.3)
+        self.pool_layer_1 = layers.MaxPooling2D(pool_size=(3,3))
+        self.conv_layer_2 = layers.Conv2D(filters=32, kernel_size=(3,3), padding='same', activation='relu')
+        self.pool_layer_2 = layers.MaxPooling2D(pool_size=(3,3))
+        self.conv_layer_3 = layers.Conv2D(filters=64, kernel_size=(2,2), padding='same', activation='relu')
+        self.pool_layer_3 = layers.MaxPooling2D(pool_size=(2,2))
+        self.conv_layer_4 = layers.Conv2D(filters=128, kernel_size=(2,2), padding='same', activation='relu') 
+        self.pool_layer_4 = layers.MaxPooling2D(pool_size=(2,2))
         self.flatten_layer = layers.Flatten() # out = (batch, filters)
+        self.dropout_layer = layers.Dropout(rate=0.3)
         self.dense_layer   = layers.Dense(1)
 
     def compute_loss(self, gen_images_output, real_images):
@@ -24,12 +27,15 @@ class DiscriminatorModel(models.Model):
     
     def call(self, inputs, training=None):
         x = self.conv_layer_1(inputs, training=training)
-        x = self.leaky_relu_1(x, training=training)
-        x = self.dropout_layer_1(x, training=training)
+        x = self.pool_layer_1(x, training=training)
         x = self.conv_layer_2(x, training=training)
-        x = self.leaky_relu_2(x, training=training)
-        x = self.dropout_layer_2(x, training=training)
+        x = self.pool_layer_2(x, training=training)
+        x = self.conv_layer_3(x, training=training)
+        x = self.pool_layer_3(x, training=training)
+        x = self.conv_layer_4(x, training=training)
+        x = self.pool_layer_4(x, training=training)
         x = self.flatten_layer(x, training=training)
+        x = self.dropout_layer(x, training=training)
         x = self.dense_layer(x, training=training)
 
         return x
