@@ -38,7 +38,17 @@ class ImageProvider:
     def _set_width(width:int):
         ImageProvider.IMG_WIDTH = width
 
-    def __init__(self, batch_size=32, should_cache=False, shuffle_buffer=1000) -> None:
+    @classmethod
+    def build_from_dataset(cls, batch_size, dataset):
+        return cls(batch_size, dataset=dataset)
+
+    def __init__(self, batch_size=32, should_cache=False, shuffle_buffer=1000, 
+                 dataset=None) -> None:
+        if(dataset != None):
+            self.dataset = dataset
+            self.batch_size = batch_size
+            return
+
         if(batch_size < 8):
             Warning("Batch size shouldn't be set to low.")
         if(batch_size > 128 or batch_size < 2):
@@ -75,10 +85,8 @@ class ImageProvider:
 
     def sample_images(self, skip, take):
         total_batches = len(self.dataset)
-        if(take > total_batches): 
-            return None
-        tmp_dataset = self.dataset.skip(skip).take(1)
+        tmp_dataset = self.dataset.skip(skip % total_batches).take(1)
         iterator = iter(tmp_dataset)
-        batch = iterator.get_next()
-        random_tensor = random.uniform([take], 0, len(batch), dtype=dtypes.int64)
-        return batch[random_tensor, ...]
+        batch = iterator.get_next().numpy()
+        random_tensor = random.uniform([take % self.batch_size], 0, self.batch_size, dtype=dtypes.int64)
+        return batch[random_tensor.numpy(), ...], take % self.batch_size
