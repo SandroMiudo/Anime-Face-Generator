@@ -3,8 +3,9 @@ from keras import saving
 import tensorflow as tf
 from .  import GeneratorModel as gen_model, DiscriminatorModel as disc_model
 from keras import callbacks
-from callbacks import GeneratorCallback as gen_callback
+from callbacks import GeneratorCallback as gen_callback, CheckpointCallback as ckpt_callback
 from os import path
+from utility.dataset import ImageProvider as img_provider
 
 @saving.register_keras_serializable()
 class BaseModel(models.Model):
@@ -44,6 +45,7 @@ class BaseModel(models.Model):
         discriminator_model = disc_model.DiscriminatorModel.from_config(disc_model_serialization)
         return cls(generator_model, discriminator_model, config.pop("batch_size"))
     
+    @tf.function
     def train_step(self, batch):
         noise_vector_shape = self.generator_model.get_noise_vector_shape()
         batch_noise_vector = tf.random.normal([self.batch_size, noise_vector_shape])
@@ -65,7 +67,7 @@ class BaseModel(models.Model):
 
         return {"gen_loss" : generator_loss, "disc_loss" : discriminator_loss}
 
-    def fit(self, dataset, epochs=100, with_early_stop=False, 
+    def fit(self, dataset, generate_images_per_epoch, epochs=100, with_early_stop=False, 
             generate_while_training=True):
         # history callback is passed in the constructor of the callback list.
         early_stop_callback1 = callbacks.EarlyStopping("gen_loss", patience=5, mode="min", start_from_epoch=10) # stop crit for generator
@@ -74,10 +76,14 @@ class BaseModel(models.Model):
         checkpoint_callback1 = callbacks.ModelCheckpoint( 
             path.join("ckpt", "weights", "ckpt.weights.{epoch:02d}.h5"),
             save_freq='epoch') # only saving weights """
+        
+        image_provider = img_provider.ImageProvider.build_from_dataset(self.batch_size,
+                                                                       dataset)
+        checkpoint_callback1 = ckpt_callback.CheckpointCallback()
         checkpoint_callback2 = callbacks.ModelCheckpoint(
             path.join("ckpt", "model", "model.keras"),
             save_freq='epoch', save_weights_only=False) # saving whole model
-        generator_callback = gen_callback.GeneratorCallback()
+        generator_callback = gen_callback.GeneratorCallback(image_provider, generate_images_per_epoch)
 
         if(with_early_stop):
             self.callback_list.append(early_stop_callback1)
@@ -85,7 +91,7 @@ class BaseModel(models.Model):
 
         if(generate_while_training):
             self.callback_list.append(generator_callback)
-        # self.callback_list.append(checkpoint_callback1)
+        self.callback_list.append(checkpoint_callback1)
         self.callback_list.append(checkpoint_callback2)
         
         self.callback_list.set_model(self)
@@ -148,5 +154,5 @@ class BaseModel(models.Model):
         return self.generator_model(noise_vectors, training=False)
     
     def checkpoint(self, _ckpt):
-        path_str = path.join("ckpt", f"ckpt_{_ckpt}.weights.h5")
+        path_str = path.join("ckpt", "weights", f"ckpt_{_ckpt}.weights.h5")
         self.save_weights(path_str, overwrite=True)
