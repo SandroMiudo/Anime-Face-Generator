@@ -3,11 +3,12 @@ from tensorflow import io
 from tensorflow import dtypes
 from tensorflow import image
 from tensorflow import random
+from ..plot import ImagePlotter as img_plt
 
 class ImageProvider:
 
-    IMG_HEIGHT = 128
-    IMG_WIDTH  = 128
+    _IMG_HEIGHT = 128
+    _IMG_WIDTH  = 128
 
     @staticmethod
     def normalize_image_zero_to_one(img):
@@ -32,17 +33,17 @@ class ImageProvider:
 
     @staticmethod
     def _set_height(height:int):
-        ImageProvider.IMG_HEIGHT = height
+        ImageProvider._IMG_HEIGHT = height
 
     @staticmethod
     def _set_width(width:int):
-        ImageProvider.IMG_WIDTH = width
+        ImageProvider._IMG_WIDTH = width
 
     @classmethod
     def build_from_dataset(cls, batch_size, dataset):
         return cls(batch_size, dataset=dataset)
 
-    def __init__(self, batch_size=32, should_cache=False, shuffle_buffer=1000, 
+    def __init__(self, batch_size=32, should_cache=False, shuffle_buffer=2000, 
                  dataset=None) -> None:
         if(dataset != None):
             self.dataset = dataset
@@ -63,13 +64,16 @@ class ImageProvider:
         def convert_to_tensor_image(dataset_file_path):
             img          = io.read_file(dataset_file_path)
             tensor_image = io.decode_jpeg(img, channels=3)
-            return image.resize(tensor_image, [ImageProvider.IMG_HEIGHT, ImageProvider.IMG_WIDTH])
+            return image.resize(tensor_image, [ImageProvider._IMG_HEIGHT, ImageProvider._IMG_WIDTH])
 
         self.dataset = self.dataset.map(convert_to_tensor_image)
         print(f"Normalizing images using {ImageProvider.normalize_function_used} --\n")
         self.dataset = self.dataset.map(lambda x : ImageProvider.normalize_function_used(x))
+        print(f"Augmenting dataset --\n")
+        self.augment()
+        print(f"{self.dataset.cardinality()} Images after augmentation --\n")
         print(f"Shuffling images using a buffer size of {shuffle_buffer} -- random order\n")
-        self.dataset = self.dataset.shuffle(shuffle_buffer)
+        self.dataset = self.dataset.shuffle(shuffle_buffer, reshuffle_each_iteration=False)
         print(f"Creating batches of size {batch_size} --\n")
         self.dataset = self.dataset.batch(batch_size, drop_remainder=True)
         if(should_cache):
@@ -81,7 +85,21 @@ class ImageProvider:
         return self.dataset, self.batch_size
     
     def provide_image_dim(self) -> tuple[int, int, int]:
-        return (ImageProvider.IMG_HEIGHT, ImageProvider.IMG_WIDTH, 3)
+        return (ImageProvider._IMG_HEIGHT, ImageProvider._IMG_WIDTH, 3)
+
+    def augment(self):
+        d1 = self.dataset.map(lambda x : image.random_brightness(x, 0.5))
+        d2 = self.dataset.map(lambda x : image.random_contrast(x, 0.1, 0.5))
+        d3 = self.dataset.map(lambda x : image.random_saturation(x, 5, 15))
+        d4 = self.dataset.map(lambda x : image.random_hue(x, 0.2))
+
+        image_plotter = img_plt.ImagePlotter(self, (4, 2))
+        image_plotter.plot_from_datasets([d1, d2, d3, d4])
+
+        self.dataset = self.dataset.concatenate(d1)
+        self.dataset = self.dataset.concatenate(d2)
+        self.dataset = self.dataset.concatenate(d3)
+        self.dataset = self.dataset.concatenate(d4)
 
     def sample_images(self, skip, take):
         total_batches = len(self.dataset)
