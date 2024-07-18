@@ -12,6 +12,12 @@ from collections.abc import Callable
 from keras.callbacks import History
 import os
 
+def print_routine_string(routine:str, **kwargs):
+    print(routine, end=' : ')
+    for v1,v2 in kwargs.items():
+        print(v1, v2, sep=" - ", end=' | ')
+    print(end='\n')
+
 def inference(ckpt, inference_count):
     if(ckpt <= 0):
         raise InferenceException("checkpoint must be in the range [1,*]")
@@ -32,17 +38,15 @@ def train(g_learning_rate, d_learning_rate, batch_size, generate_images_per_epoc
     noise_vector, epochs):
     if(g_learning_rate <= 0 or d_learning_rate <= 0):
         raise Exception("learning rate (generator and discriminator) have to be greater than zero")
-    provider = img_provider.ImageProvider()
+    print_routine_string("train", generator_learning_rate=g_learning_rate,
+        discriminator_learning_rate=d_learning_rate, batch_size=batch_size, 
+        generated_images_per_epoch=generate_images_per_epoch, noise_vector=noise_vector,
+        epochs=epochs)
+    provider = img_provider.ImageProvider(batch_size=batch_size)
     dataset, batch_size = provider.provide_images()
     input_shape = provider.provide_image_dim()
-    d_model  = discriminator_model.DiscriminatorModel(input_shape)
-    g_model  = gen_model.GeneratorModel(noise_vector)
-    b_model  =  base_model.BaseModel(g_model, d_model, batch_size)
-
-    d_model.compile(optimizers.Adam(d_learning_rate), losses.BinaryCrossentropy(from_logits=True),
-        metrics=[metrics.Mean()])
-    g_model.compile(optimizers.Adam(g_learning_rate), losses.BinaryCrossentropy(from_logits=True),
-        metrics=[metrics.Mean()])
+    b_model  =  base_model.BaseModel(g_learning_rate, d_learning_rate, noise_vector, batch_size,
+                    input_shape)
 
     fit(b_model, dataset, epochs, generate_images_per_epoch)
 
@@ -97,8 +101,8 @@ def parse_arguments():
     argument_parser.add_argument("--inference", dest="inference", action="store_true")
     argument_parser.add_argument("--inference-count", dest="inference_count", type=int, default=1)
     argument_parser.add_argument("--ckpt", dest="checkpoint", type=int, default=1)
-    argument_parser.add_argument("--noise_vector", dest="noise_vector", type=int, default=164)
-    argument_parser.add_argument("--batch-size", dest="batch_size", type=int, default=32)
+    argument_parser.add_argument("--noise_vector", dest="noise_vector", type=int, default=16)
+    argument_parser.add_argument("--batch-size", dest="batch_size", type=int, default=64)
     argument_parser.add_argument("--generate-per-epoch", dest="generate_per_epoch", type=int, default=1)
     argument_parser.add_argument("--epochs", dest="epochs", type=int, default=100)
 
