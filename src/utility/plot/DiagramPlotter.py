@@ -7,12 +7,12 @@ import os
 class DiagramPlotter(pl.Plotter):
     def __init__(self, history:History, axes: tuple[int, int]=(1,1)):
         super().__init__(axes)
-        self.history = history
+        self._history = history
 
     def plot(self):
-        epochs = self.history.epoch
-        d_loss = self.history.history["gen_loss"]
-        g_loss = self.history.history["disc_loss"]
+        epochs = self._history.epoch
+        d_loss = self._history.history["gen_loss"]
+        g_loss = self._history.history["disc_loss"]
 
         self.axes.axis('on')
         self.axes.set_xlim(0, len(epochs))
