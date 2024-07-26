@@ -6,6 +6,7 @@ from keras import metrics
 from keras import regularizers
 from keras import optimizers
 import tensorflow as tf
+from keras import saving
 
 class GeneratorModel(models.Model):
     # try setting the noise vector higher and the connecting to the first dense layer to fewer units
@@ -16,29 +17,36 @@ class GeneratorModel(models.Model):
         self._loss_tracker = metrics.Mean(name="loss")
         self._noise_vector_shape = i_shape
         self._higher_images_resolution = higher_images_resolution
-        self._dense_layer_1 = layers.Dense(128, input_shape=i_shape)
+        
+        self._dense_layer_1 = layers.Dense(128, activation='tanh', input_shape=i_shape,
+            kernel_regularizer=regularizers.l2(0.01))
 
-        self._reshape_layer_1 = layers.Reshape((8, 8, -1))
+        self._dense_layer_2 = layers.Dense(256, activation='tanh',
+            kernel_regularizer=regularizers.l2(0.01))
 
-        self._conv_layer_1 = layers.Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same')
+        self._reshape_layer_1 = layers.Reshape((4, 4, -1))
+
+        self._conv_layer_1 = layers.Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same',
+            activation='relu', kernel_regularizer=regularizers.l2(0.01))
         self._batch_normalize_layer_1 = layers.BatchNormalization()
-        self._leaky_relu_1 = layers.LeakyReLU()
 
-        # choose higher kernel and fewer filters (64, 32, 16, 3)
-        self._conv_layer_2 = layers.Conv2DTranspose(64, (4, 4), strides=(2, 2), padding='same')
+        self._conv_layer_2 = layers.Conv2DTranspose(64, (4, 4), strides=(2, 2), padding='same',
+            activation='relu', kernel_regularizer=regularizers.l2(0.01))
         self._batch_normalize_layer_2 = layers.BatchNormalization()
-        self._leaky_relu_2 = layers.LeakyReLU()
 
-        self._conv_layer_3 = layers.Conv2DTranspose(32, (5, 5), strides=(2, 2), padding='same')
+        self._conv_layer_3 = layers.Conv2DTranspose(32, (5, 5), strides=(2, 2), padding='same',
+            activation='relu', kernel_regularizer=regularizers.l2(0.01))
         self._batch_normalize_layer_3 = layers.BatchNormalization()
-        self._leaky_relu_3 = layers.LeakyReLU()
+
+        self._conv_layer_4 = layers.Conv2DTranspose(16, (5, 5), strides=(2, 2), padding='same',
+            activation='relu', kernel_regularizer=regularizers.l2(0.01))
+        self._batch_normalize_layer_4 = layers.BatchNormalization()
 
         if self._higher_images_resolution: # (128,128)
-            self._conv_layer_4 = layers.Conv2DTranspose(3, (5, 5), strides=(2, 2), padding='same', 
+            self._conv_layer_5 = layers.Conv2DTranspose(3, (5, 5), strides=(2, 2), padding='same',
                 activation='sigmoid')
         else: # (64,64)
-            self._conv_layer4 = layers.Conv2DTranspose(3, (4, 4), strides=(1, 1), padding='same', 
-                activation='relu')
+            self._conv_layer_5 = layers.Conv2DTranspose(3, (5, 5), strides=(1, 1), padding='same')
 
     def compute_loss(self, gen_images_output):
         fake_images_true_value = tf.ones_like(gen_images_output)
@@ -50,7 +58,7 @@ class GeneratorModel(models.Model):
     
     @property
     def learning_rate(self):
-        return self._loc_optimizer.learning_rate
+        return self._loc_optimizer.learning_rate.numpy()
 
     @property
     def image_higher_resolution(self):
@@ -58,21 +66,21 @@ class GeneratorModel(models.Model):
 
     def call(self, inputs, training=None):
         x = self._dense_layer_1(inputs, training=training)
+        x = self._dense_layer_2(inputs, training=training)
         x = self._reshape_layer_1(x, training=training)
         x = self._conv_layer_1(x, training=training)
         x = self._batch_normalize_layer_1(x, training=training)
-        x = self._leaky_relu_1(x, training=training)
         x = self._conv_layer_2(x, training=training)
         x = self._batch_normalize_layer_2(x, training=training)
-        x = self._leaky_relu_2(x, training=training)
         x = self._conv_layer_3(x, training=training)
         x = self._batch_normalize_layer_3(x, training=training)
-        x = self._leaky_relu_3(x, training=training)
+        x = self._conv_layer_4(x, training=training)
+        x = self._batch_normalize_layer_4(x, training=training)
 
         if(self._higher_images_resolution):
-            x = self._conv_layer_4(x, training=training)
+            x = self._conv_layer_5(x, training=training)
         else:
-            x = self._conv_layer4(x, training=training)
+            x = self._conv_layer_5(x, training=training)
 
         return x
 
@@ -81,3 +89,13 @@ class GeneratorModel(models.Model):
 
     def apply_summary(self, p_fn):
         self.summary(print_fn=p_fn)
+
+    def get_compile_config(self):
+        return {
+            "model_optimizer" : saving.serialize_keras_object(self._loc_optimizer),
+            "model_metric" : saving.serialize_keras_object(self._loss_tracker)
+        }
+    
+    def compile_from_config(self, config):
+        self._loc_optimizer = saving.deserialize_keras_object(config.pop("model_optimizer"))
+        self._loss_tracker  = saving.deserialize_keras_object(config.pop("model_metric"))
