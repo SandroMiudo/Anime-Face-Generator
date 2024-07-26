@@ -14,15 +14,15 @@ class DiagramPlotter(pl.Plotter):
         d_loss = self._history.history["gen_loss"]
         g_loss = self._history.history["disc_loss"]
 
-        self.axes.axis('on')
-        self.axes.set_xlim(0, len(epochs))
-        self.axes.set_ylim(0, 10)
-        self.axes.set_xlabel("epochs")
-        self.axes.set_ylabel("loss")
-        self.axes.set_title("loss over time")
-        self.axes.set_xticks(np.arange(0, len(epochs), 10))
+        self.axes[0,0].axis('on')
+        self.axes[0,0].set_xlim(0, len(epochs))
+        self.axes[0,0].set_ylim(0, 10)
+        self.axes[0,0].set_xlabel("epochs")
+        self.axes[0,0].set_ylabel("loss")
+        self.axes[0,0].set_title("loss over time")
+        self.axes[0,0].set_xticks(np.arange(0, len(epochs), 10))
 
-        self.axes.plot(epochs, g_loss, '-b', epochs, d_loss, '-r')
-        self.axes.legend(['Generator Loss', 'Discriminator Loss'], loc='upper right')
+        self.axes[0,0].plot(epochs, g_loss, '-b', epochs, d_loss, '-r')
+        self.axes[0,0].legend(['Generator Loss', 'Discriminator Loss'], loc='upper right')
 
         self.save(os.path.join("plots", "loss_plot.png"))
