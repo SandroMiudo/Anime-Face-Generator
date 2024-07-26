@@ -2,15 +2,15 @@ import keras.saving
 from model import BaseModel as base_model, DiscriminatorModel as discriminator_model, \
     GeneratorModel as gen_model
 from utility.dataset import ImageProvider as img_provider
-from keras import optimizers
-from keras import metrics
-from keras import losses
 import keras
 import argparse
-from exceptions import InferenceException, ArgumentBuilderException
+from exceptions.InferenceException import InferenceException
+from exceptions.ArgumentBuilderException import ArgumentBuilderException
 from collections.abc import Callable
 from keras.callbacks import History
 import os
+from keras import optimizers
+import warnings
 
 def print_routine_string(routine:str, **kwargs):
     print(routine, end=' : ')
@@ -34,10 +34,14 @@ def inference(ckpt, inference_count):
 def fit(model:base_model.BaseModel, dataset, epochs, generate_images_per_epoch) -> None:
     history = model.fit(dataset, generate_images_per_epoch, epochs)
 
-def train(g_learning_rate, d_learning_rate, batch_size, generate_images_per_epoch,
-    noise_vector, epochs):
-    if(g_learning_rate <= 0 or d_learning_rate <= 0):
-        raise Exception("learning rate (generator and discriminator) have to be greater than zero")
+
+def train(g_learning_rate : float | optimizers.schedules.LearningRateSchedule, 
+          d_learning_rate : float | optimizers.schedules.LearningRateSchedule, 
+          batch_size, generate_images_per_epoch, noise_vector, epochs):
+    if(isinstance(g_learning_rate, float) and 
+       (g_learning_rate <= 0 or d_learning_rate <= 0)):
+        raise Exception(
+            "learning rate (generator and discriminator) have to be greater than zero")
     print_routine_string("train", generator_learning_rate=g_learning_rate,
         discriminator_learning_rate=d_learning_rate, batch_size=batch_size, 
         generated_images_per_epoch=generate_images_per_epoch, noise_vector=noise_vector,
@@ -53,33 +57,151 @@ def train(g_learning_rate, d_learning_rate, batch_size, generate_images_per_epoc
 def load(generate_images_per_epoch, epochs):
     model_file = os.path.join("ckpt", "model", "model.keras")
     model = keras.models.load_model(model_file)
-    provider = img_provider.ImageProvider()
+    batch_size = model.batch_size 
+    provider = img_provider.ImageProvider(batch_size)
     dataset, _ = provider.provide_images()
     fit(model, dataset, epochs, generate_images_per_epoch)
     
 class ArgumentBuilder:
     inference_callable : Callable[[int, int], None]=None
-    train_callable     : Callable[[float, float, int, int, int, int], History]=None
-    load_callable      : Callable[[int, int], History]=None
+    train_callable     : Callable[[float | optimizers.schedules.LearningRateSchedule, 
+                                   float | optimizers.schedules.LearningRateSchedule, 
+                                   int, int, int, int], None]=None
+    load_callable      : Callable[[int, int], None]=None
 
-    def build(self, var_dict):
-        if("trainable" in var_dict):
-            self.train_callable = train
-        elif("load_model" in var_dict):
-            self.load_callable = load
-        elif("inference" in var_dict):
-            self.inference_callable = inference
+    def __init__(self, arguments):
+        self.variables = arguments
+
+    @staticmethod
+    def build(var_dict):
+        argument_builder : ArgumentBuilder = ArgumentBuilder(var_dict) 
+        if(var_dict["trainable"]):
+            argument_builder.train_callable = train
+        elif(var_dict["load_model"]):
+            argument_builder.load_callable = load
+        elif(var_dict["inference"]):
+            argument_builder.inference_callable = inference
         else:
-            raise ArgumentBuilderException("base argument has to be provided!")
-        self.variables = var_dict
-        return self
+            raise ArgumentBuilderException(
+                "base argument has to be provided!")
+
+        if argument_builder.valid_learning_arguments("learning_rate", [1,2],
+            "1 or 2 learning rates expected, but received %d arguments."):
+            argument_builder.build_components_learning_rates(
+                argument_builder.variables["learning_rate"][0],
+                argument_builder.variables["learning_rate"][1])
+
+        if argument_builder.valid_learning_arguments("exp_decay", [3,6],
+            "Expected 3 or 6 arguments for the exp decay learning rate schedule, "
+                "but received %d arguments."):
+            _exp_list = argument_builder.variables["exp_decay"]
+            argument_builder.build_components_learning_rates(
+                optimizers.schedules.ExponentialDecay(_exp_list[0], _exp_list[1],
+                _exp_list[2]),
+                optimizers.schedules.ExponentialDecay(_exp_list[3], _exp_list[4],
+                _exp_list[5]))
+
+        if argument_builder.valid_learning_arguments("poly_decay", [4,8],
+            "Expected 4 or 8 arguments for the poly decay learning rate schedule, "
+                "but received %d arguments."):
+            _poly_list = argument_builder.variables["poly_decay"]
+            argument_builder.build_components_learning_rates(
+                optimizers.schedules.PolynomialDecay(_poly_list[0], _poly_list[1],
+                _poly_list[2], _poly_list[3]),
+                optimizers.schedules.PolynomialDecay(_poly_list[4], _poly_list[5],
+                _poly_list[6], _poly_list[7]))
+        
+        if argument_builder.valid_learning_arguments_const():
+            _const_bounds_list = argument_builder.variables["const_bounds"]
+            _const_values_list = argument_builder.variables["const_values"]
+            argument_builder.build_components_learning_rates(
+                optimizers.schedules.PiecewiseConstantDecay(
+                    _const_bounds_list[:len(_const_bounds_list)//2],
+                    _const_values_list[:len(_const_values_list)//2]),
+                optimizers.schedules.PiecewiseConstantDecay(
+                    _const_bounds_list[len(_const_bounds_list)//2:],
+                    _const_values_list[len(_const_values_list)//2:]))
+
+        if not(hasattr(argument_builder, "_generator")) or \
+           not(hasattr(argument_builder, "_discriminator")):
+            raise ArgumentBuilderException(
+                "Learning Rate or Learning Rate Schedule is required.")
+
+        return argument_builder
+
+    def valid_learning_arguments(self, search_entry : str, search_values: list[int, int],
+        miss_search_str : str):
+        if(self.variables[search_entry] != None and 
+           len(self.variables[search_entry]) not in search_values):
+            raise ArgumentBuilderException(
+                miss_search_str % len(self.variables[search_entry]))
+        elif(self.variables[search_entry] != None):
+            if len(self.variables[search_entry]) == search_values[0]:
+                self.variables[search_entry] = self.variables[search_entry]*2
+
+            return True
+        return False # indicates that this option was not specified
+        
+    def valid_learning_arguments_const(self):
+        search_value = [1,2]
+        if self.variables["constant_decay"] != None and \
+           self.variables["constant_decay"] in search_value:
+            if self.variables["const_bounds"] == None or \
+               self.variables["const_values"] == None:
+               raise ArgumentBuilderException(
+                   "Constant decay learning rate options consist of three subparts,"
+                   " but not all subparts were specified.")
+            if self.in_range("const_bounds", "const_values", 0): 
+                raise ArgumentBuilderException(
+                    "Specified more than allowed boundary arguments")
+            if self.variables["constant_decay"] == search_value[0] and \
+                self.in_range("const_values", "const_bounds", 1) or \
+                self.variables["constant_decay"] == search_value[1] and \
+                self.in_range("const_values", "const_bounds", 2):
+                raise ArgumentBuilderException(
+                    "Specified more than allowed value arguments")
+            if self.variables["constant_decay"] == search_value[1] and \
+                (len(self.variables["const_bounds"]) % 2 != 0 or \
+                 len(self.variables["const_values"]) % 2 != 0):
+                raise ArgumentBuilderException(
+                    "Only unit changes allowed.")
+            if self.variables["constant_decay"] == search_value[0]:
+                self.variables["const_bounds"] = self.variables["const_bounds"]*2
+                self.variables["const_values"] = self.variables["const_values"]*2
+            return True
+        return False
+
+    def in_range(self, search_entry : str, search_entry_2 : str, i : int):
+        return (len(self.variables[search_entry]) - i) > len(self.variables[search_entry_2]) 
+
+    def build_components_learning_rates(
+            self, 
+            l_generator : float | optimizers.schedules.LearningRateSchedule, 
+            l_discriminator : float | optimizers.schedules.LearningRateSchedule):
+        self._generator = l_generator
+        self._discriminator = l_discriminator
 
     def run(self):
         if(self.variables == None):
-            raise ArgumentBuilderException("build has to be called before running!")
+            raise ArgumentBuilderException(
+                "build has to be called before running!")
+
+        if(self.variables["learning_rate"] != None and 
+            (self.variables["exp_decay"] != None or self.variables["poly_decay"] != None)):
+            warnings.warn("Learning rate schedule was specified in conjuction with float type learning rate.\n"
+                    "Float type learning rate is used in the optimizer.\nIf this was not intended, \n"
+                    "make sure to leave out the floating type learning rate.")
+
+        elif(self.variables["exp_decay"] != None and self.variables["poly_decay"] != None):
+            warnings.warn("Both learning rate schedules were specified.\nUsing exponential decay schedule.\n"
+                    "If this was not intended, make sure to leave out one learing rate schedule.")
+
+        elif(self.variables["exp_decay"] != None or self.variables["poly_decay"] != None):
+            warnings.warn("It is required that the arguments to the specified learning rate schedule, contain the correct format.\n"
+                    "If this is not the case, this might lead to unexpected behaviour.")
 
         if(self.train_callable != None):
-            self.train_callable(self.variables["g_learning"], self.variables["d_learning"],
+            self.train_callable(self._generator, self._discriminator,
                 self.variables["batch_size"], self.variables["generate_per_epoch"],
                 self.variables["noise_vector"], self.variables["epochs"])
         elif(self.load_callable != None):
@@ -96,20 +218,44 @@ def parse_arguments():
     argument_parser.add_argument("--version", action='version', version='1.0')
     argument_parser.add_argument("-t", "--train", help='specifies if train should occur',
         action='store_true', dest='trainable')
-    argument_parser.add_argument("--g-learning-rate", dest="g_learning", type=float, default=1e-4)
-    argument_parser.add_argument("--d-learning-rate", dest="d_learning", type=float, default=1e-4)
+    argument_parser.add_argument("--learning-rate", nargs='+', dest="learning_rate", type=float,
+        help="If one argument is passed in, the learning rate is used for both models.\n"
+             "Otherwise (meaning 2 arguments) the first learning rate is used for the generator and" 
+             "the second learning rate for the discriminator.")
     argument_parser.add_argument("--inference", dest="inference", action="store_true")
     argument_parser.add_argument("--inference-count", dest="inference_count", type=int, default=1)
     argument_parser.add_argument("--ckpt", dest="checkpoint", type=int, default=1)
-    argument_parser.add_argument("--noise_vector", dest="noise_vector", type=int, default=16)
+    argument_parser.add_argument("--noise-vector", dest="noise_vector", type=int, default=16)
     argument_parser.add_argument("--batch-size", dest="batch_size", type=int, default=64)
     argument_parser.add_argument("--generate-per-epoch", dest="generate_per_epoch", type=int, default=1)
     argument_parser.add_argument("--epochs", dest="epochs", type=int, default=100)
-
+    argument_parser.add_argument("--exponential-decay", nargs= '+', type=float, help="f1 = initial learning rate (0.01)\n"
+        "f2 = decay steps (100000)\nf3 = decay rate (0.96)\nIf 3 arguments are passed, these options are"
+        "used for both models.\n"
+        "If 6 arguments are passed, f1-f3 are used for the generator and f4-f7 for the discriminator.", 
+        dest="exp_decay")
+    argument_parser.add_argument("--polynomial-decay", nargs='+', type=float, help="f1 = initial learning rate (0.01)\n"
+        "f2 = decay steps (100000)\nf3 = end learning rate (0.0001)\nf4 = power (0.5)", dest="poly_decay")
+    argument_parser.add_argument("--constant-decay", dest="constant_decay", type=int,
+        help="This learning rate schedule behaves different, than the previous two options.\n"
+        "The option for the constant decay learning rate schedule is subdivided into three parts."
+        "Each of that subpart is required and can't be left empty!\n"
+        "This part is just used to indicate that the constant decay learning rate schedule should be used.\n"
+        "Parts that should following are : '--constant-decay-boundaries' and '--constant-decay-values'\n."
+        "Example usage : --constant-decay --constant-decay-boundaries 100000 110000 "
+        "--constant-decay-values 1.0 0.5 0.1")
+    argument_parser.add_argument("--constant-decay-boundaries", nargs="+", type=int, dest="const_bounds",
+        help="Boundaries at which the scheduler, will set a new learning rate.\n"
+             "These arguments should be in non decreasing order and should match exactly (or len - 1)"
+             "the arguments specified in '--constant-decay-values'.")
+    argument_parser.add_argument("--constant-decay-values", nargs="+", type=float, dest="const_values",
+        help="Values at which the scheduler will adjust its learning rate at a given boundary X."
+             "These arguments should be in non decreasing order and the arguments length must "
+             "match exactly (or len + 1) the arguments provided by '--constant-decay-boundaries'.")
     namespace_obj = argument_parser.parse_args()
     var_dict      = vars(namespace_obj)
 
-    ArgumentBuilder().build(var_dict).run()
+    ArgumentBuilder.build(var_dict).run()
 
 if __name__ == "__main__":
     parse_arguments()
