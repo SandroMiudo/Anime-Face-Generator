@@ -8,10 +8,13 @@ from callbacks import GeneratorCallback as gen_callback,\
     CheckpointCallback as ckpt_callback, ModelCallback as mod_callback
 from os import path
 from utility.dataset import ImageProvider as img_provider
+from keras import optimizers
 
-@saving.register_keras_serializable()
+@saving.register_keras_serializable(package="Model", name="Base")
 class BaseModel(models.Model):
-    def __init__(self, g_learning_rate, d_learning_rate,
+    def __init__(self, 
+                 g_learning_rate : float | optimizers.schedules.LearningRateSchedule, 
+                 d_learning_rate : float | optimizers.schedules.LearningRateSchedule,
                  noise_vector, batch_size, d_input):
         super().__init__()
         self._generator_model = gen_model.GeneratorModel(noise_vector, g_learning_rate)
@@ -20,8 +23,6 @@ class BaseModel(models.Model):
         self._callback_list = callbacks.CallbackList(add_history=True, add_progbar=True)
 
     def get_config(self):
-        base_configuration = super().get_config()
-
         architecture_configuration = {
             "g_learning_rate" : self._generator_model.learning_rate,
             "d_learning_rate" : self._discriminator_model.learning_rate,
@@ -29,8 +30,7 @@ class BaseModel(models.Model):
             "batch_size" : self._batch_size,
             "d_input" : self._discriminator_model.shape
         }
-
-        return {**base_configuration, **architecture_configuration}
+        return architecture_configuration
     
     def generate(self, noise_vectors):
         return self._generator_model(noise_vectors, training=False)
@@ -46,6 +46,34 @@ class BaseModel(models.Model):
         return cls(g_learning_rate, d_learning_rate, noise_vector, 
                    batch_size, d_input)
     
+    def get_build_config(self):
+        g_build_config = self._generator_model.get_build_config()
+        d_build_config = self._discriminator_model.get_build_config()
+        return {
+            "g_build_configuration" : g_build_config,
+            "d_build_configuration" : d_build_config
+        }
+    
+    def get_compile_config(self):
+        g_compile_config = self._generator_model.get_compile_config()
+        d_compile_config = self._discriminator_model.get_compile_config()
+        return {
+            "g_compile_configuration" : g_compile_config,
+            "d_compile_configuration" : d_compile_config
+        }
+
+    def build_from_config(self, config):
+        g_build_config = config.pop("g_build_configuration")
+        d_build_config = config.pop("d_build_configuration")
+        self._generator_model.build_from_config(g_build_config)
+        self._discriminator_model.build_from_config(d_build_config)
+
+    def compile_from_config(self, config):
+        g_compile_config = config.pop("g_compile_configuration")
+        d_compile_config = config.pop("d_compile_configuration")
+        self._generator_model.compile_from_config(g_compile_config)
+        self._discriminator_model.compile_from_config(d_compile_config)
+
     @tf.function
     def train_step(self, batch):
         noise_vector_shape = self._generator_model.noise_vector_shape
@@ -84,6 +112,10 @@ class BaseModel(models.Model):
             path.join("ckpt", "weights", "ckpt.weights.{epoch:02d}.h5"),
             save_freq='epoch') # only saving weights """
         
+        # since base model contains the *from_config() it is necassary to revert base model status
+        self.compiled = False
+        self.built    = False
+
         image_provider = img_provider.ImageProvider.build_from_dataset(
             self._batch_size, dataset)
         checkpoint_callback1 = ckpt_callback.CheckpointCallback()
@@ -103,8 +135,6 @@ class BaseModel(models.Model):
         self._callback_list.append(checkpoint_callback1)
         self._callback_list.append(checkpoint_callback2)
         self._callback_list.append(model_callback)
-
-        self.compile()
         
         self._callback_list.set_model(self)
         self._callback_list.set_params({"epochs" : epochs, "verbose" : 1,
@@ -157,9 +187,6 @@ class BaseModel(models.Model):
         return {"gen_loss" : bic_generator.result(), "disc_loss" : bic_discriminator.result(), 
                 "gen_acc" : gen_acc, "disc_acc" : 1 - gen_acc}
     
-    """
-    used to generate images -> inference
-    """
     def predict(self, quantity:int=5):
         noise_vector_shape = self._generator_model.noise_vector_shape
         noise_vectors = tf.random.normal([quantity, noise_vector_shape])
@@ -175,6 +202,10 @@ class BaseModel(models.Model):
         self._discriminator_model.apply_summary(p_fn)
 
     @property
+    def batch_size(self):
+        return self._batch_size
+
+    @property
     def discriminator(self):
         return {
             "d_input" : self._discriminator_model.shape,
@@ -188,4 +219,3 @@ class BaseModel(models.Model):
             "learning_rate" : self._generator_model.learning_rate,
             "image_higher_res" : self._generator_model.image_higher_resolution
         }
-    
