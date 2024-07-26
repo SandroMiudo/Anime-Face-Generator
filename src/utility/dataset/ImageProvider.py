@@ -41,10 +41,10 @@ class ImageProvider:
 
     @classmethod
     def build_from_dataset(cls, batch_size, dataset):
-        return cls(batch_size, dataset=dataset)
+        return cls(batch_size=batch_size, dataset=dataset)
 
-    def __init__(self, batch_size=32, should_cache=False, shuffle_buffer=2000, 
-                 dataset=None) -> None:
+    def __init__(self, batch_size=32, should_cache=False, shuffle_buffer=10000, 
+                 dataset=None, debug_mode=False) -> None:
         if(dataset != None):
             self.dataset = dataset
             self.batch_size = batch_size
@@ -57,6 +57,7 @@ class ImageProvider:
         dataset = data.Dataset.list_files("dataset/*")
         self.dataset = dataset
         self.batch_size = batch_size
+        self.debug_mode = debug_mode
         print(f"{dataset.cardinality()} Images found --\n")
         print("Preprocess data : order --\n")
         print("Converting images to tensors --\n")
@@ -73,7 +74,7 @@ class ImageProvider:
         self.augment()
         print(f"{self.dataset.cardinality()} Images after augmentation --\n")
         print(f"Shuffling images using a buffer size of {shuffle_buffer} -- random order\n")
-        self.dataset = self.dataset.shuffle(shuffle_buffer, reshuffle_each_iteration=False)
+        self.dataset = self.dataset.shuffle(shuffle_buffer, reshuffle_each_iteration=True)
         print(f"Creating batches of size {batch_size} --\n")
         self.dataset = self.dataset.batch(batch_size, drop_remainder=True)
         if(should_cache):
@@ -88,18 +89,21 @@ class ImageProvider:
         return (ImageProvider._IMG_HEIGHT, ImageProvider._IMG_WIDTH, 3)
 
     def augment(self):
-        d1 = self.dataset.map(lambda x : image.random_brightness(x, 0.5))
-        d2 = self.dataset.map(lambda x : image.random_contrast(x, 0.1, 0.5))
-        d3 = self.dataset.map(lambda x : image.random_saturation(x, 5, 15))
-        d4 = self.dataset.map(lambda x : image.random_hue(x, 0.2))
+        d1 = self.dataset.map(lambda x : image.random_brightness(x, 0.3))
+        d2 = self.dataset.map(lambda x : image.random_contrast(x, 0.7, 1.3))
+        d3 = self.dataset.map(lambda x : image.random_saturation(x, 0.7, 1.3))
+        d4 = self.dataset.map(lambda x : image.random_jpeg_quality(x, 88, 92))
+        d5 = self.dataset.map(lambda x : image.random_hue(x, 0.05))
 
-        image_plotter = img_plt.ImagePlotter(self, (4, 2))
-        image_plotter.plot_from_datasets([d1, d2, d3, d4])
+        if(self.debug_mode):
+            image_plotter = img_plt.ImagePlotter(self, (5, 2))
+            image_plotter.plot_from_datasets([d1, d2, d3, d4, d5])
 
         self.dataset = self.dataset.concatenate(d1)
         self.dataset = self.dataset.concatenate(d2)
         self.dataset = self.dataset.concatenate(d3)
         self.dataset = self.dataset.concatenate(d4)
+        self.dataset = self.dataset.concatenate(d5)
 
     def sample_images(self, skip, take):
         total_batches = len(self.dataset)
