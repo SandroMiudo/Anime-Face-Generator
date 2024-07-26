@@ -5,7 +5,6 @@ import os
 from ..dataset import ImageProvider as img_provider
 import time
 from typing import Any
-from collections.abc import Callable
 
 class ImagePlotter(pl.Plotter):
     def __init__(self, image_provider:img_provider.ImageProvider, 
@@ -55,7 +54,7 @@ class ImagePlotter(pl.Plotter):
     def plot_from_datasets(self, datasets : list[Any], plot_per_dataset=2):
         k=0
         for dataset in datasets:
-            for i in range(plot_per_dataset):
+            for _ in range(plot_per_dataset):
                 self.plot_from_dataset(dataset, k, -1, show=False)
                 k+=1
         plt.show()
