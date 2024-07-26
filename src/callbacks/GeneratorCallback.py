@@ -13,25 +13,29 @@ class GeneratorCallback(callbacks.Callback):
         self._generate_seed_images      = generate_seed_images
 
     def on_epoch_end(self, epoch, logs=None):
-        for i in range(self._generate_images_per_epoch):
-            self.generate_image(epoch, i, True)
-        for i in range(self._generate_seed_images):
-            self.generate_image(epoch, i, False)
+        self.generate_image(epoch, True, self._generate_images_per_epoch)
+        self.generate_image(epoch, False, self._generate_seed_images)
 
-    def generate_image(self, epoch, i, rand: bool):
+    def generate_image(self, epoch, rand: bool, generate_c: int):
         noise_vectors = None
         out_loc       = None
         if(rand):
             noise_vectors = np.random.normal(0, 1, [self._generate_images_per_epoch, 
             self._noise_vector])
-            out_loc = path.join("generator_out", "random", f"generated_in_epoch_{epoch}_img_{i}.jpg")
+            out_loc = path.join("generator_out", "random", f"generated_in_epoch_{epoch+1}_img_")
         else:
             noise_vectors = self._seed
-            out_loc = path.join("generator_out", "seed", f"generated_in_epoch_{epoch}_seed_img_{i}.jpg")
+            out_loc = path.join("generator_out", "seed", f"generated_in_epoch_{epoch+1}_seed_img_")
         generated_images = self.model.generate(noise_vectors)
-        image_result = Image.fromarray(np.asarray(generated_images[0, ...] * 127.5 + 127.5, dtype=np.uint8))
-        image_result.save(out_loc)
+        for i in range(generate_c):
+            tmp_loc = out_loc + f"{i+1}.jpg"
+            print(tmp_loc)
+            self.image_routine(generated_images[i], tmp_loc)
     
+    def image_routine(self, generated_image, out_loc):
+        image_result = Image.fromarray(np.asarray(generated_image * 255, dtype=np.uint8))
+        image_result.save(out_loc)
+
     def on_train_begin(self, logs=None):
         # self._image_plotter.plot()
         # self._image_plotter.plot("denorm")
