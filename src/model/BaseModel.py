@@ -9,6 +9,7 @@ from callbacks import GeneratorCallback as gen_callback,\
 from os import path
 from utility.dataset import ImageProvider as img_provider
 from keras import optimizers
+from keras import export
 
 @saving.register_keras_serializable(package="Model", name="Base")
 class BaseModel(models.Model):
@@ -169,7 +170,7 @@ class BaseModel(models.Model):
 
     def evaluate(self, quantity:int=1000):
         noise_vector_shape = self._generator_model.noise_vector_shape
-        _range = self._batch_size // quantity
+        _range = quantity // self._batch_size 
         bic_generator = metrics.BinaryCrossentropy()
         bic_discriminator = metrics.BinaryCrossentropy()
         bia = metrics.BinaryAccuracy()
@@ -200,6 +201,15 @@ class BaseModel(models.Model):
         self.summary(print_fn=p_fn)
         self._generator_model.apply_summary(p_fn)
         self._discriminator_model.apply_summary(p_fn)
+
+    def export(self):
+        gen_dict  = self.generator
+        ex_arch = export.ExportArchive()
+        ex_arch.track(self._generator_model)
+        ex_arch.add_endpoint("inference", self._generator_model.call,
+            input_signature=[tf.TensorSpec(
+                shape=(None, gen_dict["noise_vector"]), dtype=tf.float32)])
+        ex_arch.write_out(path.join("ckpt", "model", "model-inference"))
 
     @property
     def batch_size(self):
