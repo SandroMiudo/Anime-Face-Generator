@@ -7,64 +7,52 @@ from keras import optimizers
 from keras import losses
 import tensorflow as tf
 from keras import saving
+from utility.models import ModelHelper
 
 class DiscriminatorModel(models.Model):
 
     def __init__(self, i_shape:tuple[int,int,int], learning_rate):
         super().__init__()
         self._i_shape = i_shape
-        self._bin_loss = losses.BinaryCrossentropy()
+        self._bin_loss = losses.BinaryCrossentropy(label_smoothing=0.1)
         self._loc_optimizer = optimizers.Adam(learning_rate)
-        self._loss_tracker = metrics.Mean(name="loss")  
-        regularization_factor = 0.01
-        self._conv_layer_1 = layers.Conv2D(filters=8, kernel_size=(5,5), padding='same', 
-            input_shape=i_shape, 
-            activation='relu', kernel_regularizer=regularizers.L1(regularization_factor))
-        self._batch_normalize_layer_1 = layers.BatchNormalization()
+        self._loss_tracker = metrics.Mean(name="loss")
+        self._conv_block_1 = ModelHelper.Conv2DBlockBuilder.construct(16, (3,3), 
+            i_shape=self._i_shape)
         self._pool_layer_1 = layers.MaxPooling2D(pool_size=(2,2))
-        self._conv_layer_2 = layers.Conv2D(filters=16, kernel_size=(5,5), padding='same', 
-            activation='relu', kernel_regularizer=regularizers.L1(regularization_factor))
-        self._batch_normalize_layer_2 = layers.BatchNormalization()
+        self._drop_layer_1 = layers.Dropout(0.1)
+        self._conv_block_2 = ModelHelper.Conv2DBlockBuilder.construct(32, (3,3))
         self._pool_layer_2 = layers.MaxPooling2D(pool_size=(2,2))
-        self._conv_layer_3 = layers.Conv2D(filters=32, kernel_size=(5,5), padding='same', 
-            activation='relu', kernel_regularizer=regularizers.L1(regularization_factor))
-        self._batch_normalize_layer_3 = layers.BatchNormalization()
+        self._drop_layer_2 = layers.Dropout(0.1)
+        self._conv_block_3 = ModelHelper.Conv2DBlockBuilder.construct(64, (3,3))
         self._pool_layer_3 = layers.MaxPooling2D(pool_size=(2,2))
-        self._conv_layer_4 = layers.Conv2D(filters=64, kernel_size=(5,5), padding='same', 
-            activation='relu', kernel_regularizer=regularizers.L1(regularization_factor))
-        self._batch_normalize_layer_4 = layers.BatchNormalization()
-        self._pool_layer_4 = layers.MaxPooling2D(pool_size=(2,2))
-        self._conv_layer_5 = layers.Conv2D(filters=128, kernel_size=(5,5), padding='same', 
-            activation='relu', kernel_regularizer=regularizers.L1(regularization_factor))
-        self._batch_normalize_layer_5 = layers.BatchNormalization()
-        self._pool_layer_5 = layers.MaxPooling2D(pool_size=(2,2))
+        self._drop_layer_3 = layers.Dropout(0.1)
+        self._conv_block_4 = ModelHelper.Conv2DBlockBuilder.construct(128, (3,3))
+
         self._flatten_layer = layers.Flatten()
-        self._dense_layer_1 = layers.Dense(1, activation='sigmoid')
+        self._dense_layer_1 = layers.Dense(8, activation='relu')
+        self._dense_layer_2 = layers.Dense(1, activation='sigmoid')
 
     def compute_loss(self, gen_images_output, real_images):
-        real_images_true_value = (tf.ones_like(real_images) * 0.9)
-        fake_images_true_value = (tf.zeros_like(gen_images_output) + 0.1)
+        real_images_true_value = tf.ones_like(real_images)
+        fake_images_true_value = tf.zeros_like(gen_images_output)
 
         return self._bin_loss(real_images_true_value, real_images) + self._bin_loss(fake_images_true_value, gen_images_output)
 
     def call(self, inputs, training=None):
-        x = self._conv_layer_1(inputs, training=training)
-        x = self._batch_normalize_layer_1(inputs, training=training)
+        x = ModelHelper.LayerIterator(self._conv_block_1)(inputs, training=training)
         x = self._pool_layer_1(x, training=training)
-        x = self._conv_layer_2(x, training=training)
-        x = self._batch_normalize_layer_2(inputs, training=training)
+        x = self._drop_layer_1(x, training=training)
+        x = ModelHelper.LayerIterator(self._conv_block_2)(x, training=training)
         x = self._pool_layer_2(x, training=training)
-        x = self._conv_layer_3(x, training=training)
-        x = self._batch_normalize_layer_3(x, training=training)
+        x = self._drop_layer_2(x, training=training)
+        x = ModelHelper.LayerIterator(self._conv_block_3)(x, training=training)
         x = self._pool_layer_3(x, training=training)
-        x = self._conv_layer_4(x, training=training)
-        x = self._batch_normalize_layer_4(x, training=training)
-        x = self._pool_layer_4(x, training=training)
-        x = self._conv_layer_5(x, training=training)
-        x = self._batch_normalize_layer_5(x, training=training)
-        x = self._pool_layer_5(x, training=training)
+        x = self._drop_layer_3(x, training=training)
+        x = ModelHelper.LayerIterator(self._conv_block_4)(x, training=training)
         x = self._flatten_layer(x, training=training)
         x = self._dense_layer_1(x, training=training)
+        x = self._dense_layer_2(x, training=training)
         return x
 
     def get_config(self):

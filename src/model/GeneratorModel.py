@@ -7,9 +7,9 @@ from keras import regularizers
 from keras import optimizers
 import tensorflow as tf
 from keras import saving
+from utility.models import ModelHelper
 
 class GeneratorModel(models.Model):
-    # try setting the noise vector higher and the connecting to the first dense layer to fewer units
     def __init__(self, i_shape:int, learning_rate, higher_images_resolution=True):
         super().__init__()
         self._bin_loss = losses.BinaryCrossentropy()
@@ -18,35 +18,18 @@ class GeneratorModel(models.Model):
         self._noise_vector_shape = i_shape
         self._higher_images_resolution = higher_images_resolution
         
-        self._dense_layer_1 = layers.Dense(128, activation='tanh', input_shape=i_shape,
-            kernel_regularizer=regularizers.l2(0.01))
+        self._dense_layer_1 = layers.Dense(64, activation='relu', input_shape=i_shape) 
+        self._dense_layer_2 = layers.Dense(512, activation='relu')
+        self._reshape_layer_1 = layers.Reshape((8, 8, -1))
 
-        self._dense_layer_2 = layers.Dense(256, activation='tanh',
-            kernel_regularizer=regularizers.l2(0.01))
-
-        self._reshape_layer_1 = layers.Reshape((4, 4, -1))
-
-        self._conv_layer_1 = layers.Conv2DTranspose(128, (4, 4), strides=(2, 2), padding='same',
-            activation='relu', kernel_regularizer=regularizers.l2(0.01))
-        self._batch_normalize_layer_1 = layers.BatchNormalization()
-
-        self._conv_layer_2 = layers.Conv2DTranspose(64, (4, 4), strides=(2, 2), padding='same',
-            activation='relu', kernel_regularizer=regularizers.l2(0.01))
-        self._batch_normalize_layer_2 = layers.BatchNormalization()
-
-        self._conv_layer_3 = layers.Conv2DTranspose(32, (5, 5), strides=(2, 2), padding='same',
-            activation='relu', kernel_regularizer=regularizers.l2(0.01))
-        self._batch_normalize_layer_3 = layers.BatchNormalization()
-
-        self._conv_layer_4 = layers.Conv2DTranspose(16, (5, 5), strides=(2, 2), padding='same',
-            activation='relu', kernel_regularizer=regularizers.l2(0.01))
-        self._batch_normalize_layer_4 = layers.BatchNormalization()
-
+        self._conv_block_1 = ModelHelper.Conv2D_T_BlockBuilder.construct(128, (3,3))
+        self._conv_block_2 = ModelHelper.Conv2D_T_BlockBuilder.construct(64 , (3,3))
+        self._conv_block_3 = ModelHelper.Conv2D_T_BlockBuilder.construct(32 , (3,3))
+        
         if self._higher_images_resolution: # (128,128)
-            self._conv_layer_5 = layers.Conv2DTranspose(3, (5, 5), strides=(2, 2), padding='same',
-                activation='sigmoid')
-        else: # (64,64)
-            self._conv_layer_5 = layers.Conv2DTranspose(3, (5, 5), strides=(1, 1), padding='same')
+            self._conv_block_4 = ModelHelper.Conv2D_T_BlockBuilder.construct(16 , (3,3))
+        
+        self._conv_layer_1 = layers.Conv2D(3, (1,1), activation='sigmoid')
 
     def compute_loss(self, gen_images_output):
         fake_images_true_value = tf.ones_like(gen_images_output)
@@ -66,21 +49,16 @@ class GeneratorModel(models.Model):
 
     def call(self, inputs, training=None):
         x = self._dense_layer_1(inputs, training=training)
-        x = self._dense_layer_2(inputs, training=training)
+        x = self._dense_layer_2(x, training=training)
         x = self._reshape_layer_1(x, training=training)
-        x = self._conv_layer_1(x, training=training)
-        x = self._batch_normalize_layer_1(x, training=training)
-        x = self._conv_layer_2(x, training=training)
-        x = self._batch_normalize_layer_2(x, training=training)
-        x = self._conv_layer_3(x, training=training)
-        x = self._batch_normalize_layer_3(x, training=training)
-        x = self._conv_layer_4(x, training=training)
-        x = self._batch_normalize_layer_4(x, training=training)
+        x = ModelHelper.LayerIterator(self._conv_block_1)(x, training)
+        x = ModelHelper.LayerIterator(self._conv_block_2)(x, training)      
+        x = ModelHelper.LayerIterator(self._conv_block_3)(x, training)
 
-        if(self._higher_images_resolution):
-            x = self._conv_layer_5(x, training=training)
-        else:
-            x = self._conv_layer_5(x, training=training)
+        if self._higher_images_resolution:
+            x = ModelHelper.LayerIterator(self._conv_block_4)(x, training)
+
+        x = self._conv_layer_1(x, training=training)
 
         return x
 
