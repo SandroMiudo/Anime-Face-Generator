@@ -7,7 +7,7 @@ import time
 from typing import Any
 
 class ImagePlotter(pl.Plotter):
-    def __init__(self, image_provider:img_provider.ImageProvider, 
+    def __init__(self, image_provider:img_provider.ImageProvider | None, 
                  axes: tuple[int, int]=(4, 4)):
         super().__init__(axes, xticks=[], yticks=[])
         self._image_provider = image_provider
@@ -57,4 +57,9 @@ class ImagePlotter(pl.Plotter):
             for _ in range(plot_per_dataset):
                 self.plot_from_dataset(dataset, k, -1, show=False)
                 k+=1
+        plt.show()
+
+    def plot_from_image(self, image):
+        self.axes[0, 0].axis('off')
+        self.axes[0, 0].imshow(image)
         plt.show()
