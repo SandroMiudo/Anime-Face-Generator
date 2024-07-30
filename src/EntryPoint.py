@@ -8,6 +8,9 @@ from collections.abc import Callable
 import os
 from keras import optimizers
 import warnings
+from utility.plot import ImagePlotter as img_plt
+from tensorflow import saved_model
+from numpy import random
 
 def print_routine_string(routine:str, **kwargs):
     print(routine, end=' : ')
@@ -21,20 +24,34 @@ def inference(ckpt, inference_count):
     if(inference_count <= 0):
         raise InferenceException("inference count must be in the range [1,*]")
     files_present = os.listdir(os.path.join("ckpt", "weights"))
-    if(ckpt > files_present):
+    if(ckpt > len(files_present)):
         raise InferenceException("checkpoint is not present!")
-    weights_file_path = os.path.join("ckpt", "weights", f"ckpt_{ckpt-1}.weights.h5")
-    model = keras.models.load_model(weights_file_path)
+    artifact = saved_model.load(os.path.join("ckpt", "model", "model-inference"))
+    noise_vectors = random.normal(0, 1, 
+        (inference_count, artifact.signatures["inference"].inputs[0].shape[1]))
+    generated_images = artifact.inference(noise_vectors)
+    print("Generating images ...")
     for i in range(inference_count):
-        generated_image = model.predict(inference_count)
+        image_plotter = img_plt.ImagePlotter(None, (1, 1))
+        image_plotter.plot_from_image(generated_images[i])
 
 def fit(model:base_model.BaseModel, dataset, epochs, generate_images_per_epoch) -> None:
     history = model.fit(dataset, generate_images_per_epoch, epochs)
-
+    print("training completed :",
+          f"generator loss = {history.history["gen_loss"]}",
+          f"discriminator loss = {history.history["disc_loss"]}", sep='\n')
+    _eval_dict = model.evaluate(quantity=10000)
+    print(f"evaluating model : \n\tgenerator loss = {_eval_dict["gen_loss"]}", 
+          f"\tdiscriminator loss = {_eval_dict["disc_loss"]}",
+          f"\tgenerator accuracy = {_eval_dict["gen_acc"]}",
+          f"\tdiscriminator accuracy = {_eval_dict["disc_acc"]}",
+          sep='\n')
+    model.export()
 
 def train(g_learning_rate : float | optimizers.schedules.LearningRateSchedule, 
           d_learning_rate : float | optimizers.schedules.LearningRateSchedule, 
-          batch_size, generate_images_per_epoch, noise_vector, epochs):
+          batch_size, generate_images_per_epoch, noise_vector, epochs,
+          no_augment):
     if(isinstance(g_learning_rate, float) and 
        (g_learning_rate <= 0 or d_learning_rate <= 0)):
         raise Exception(
@@ -43,7 +60,7 @@ def train(g_learning_rate : float | optimizers.schedules.LearningRateSchedule,
         discriminator_learning_rate=d_learning_rate, batch_size=batch_size, 
         generated_images_per_epoch=generate_images_per_epoch, noise_vector=noise_vector,
         epochs=epochs)
-    provider = img_provider.ImageProvider(batch_size=batch_size)
+    provider = img_provider.ImageProvider(batch_size=batch_size, no_augment=no_augment)
     dataset, batch_size = provider.provide_images()
     input_shape = provider.provide_image_dim()
     b_model  =  base_model.BaseModel(g_learning_rate, d_learning_rate, noise_vector, batch_size,
@@ -51,11 +68,11 @@ def train(g_learning_rate : float | optimizers.schedules.LearningRateSchedule,
 
     fit(b_model, dataset, epochs, generate_images_per_epoch)
 
-def load(generate_images_per_epoch, epochs):
+def load(generate_images_per_epoch, epochs, no_augment):
     model_file = os.path.join("ckpt", "model", "model.keras")
     model = keras.models.load_model(model_file)
     batch_size = model.batch_size 
-    provider = img_provider.ImageProvider(batch_size)
+    provider = img_provider.ImageProvider(batch_size, no_augment=no_augment)
     dataset, _ = provider.provide_images()
     fit(model, dataset, epochs, generate_images_per_epoch)
     
@@ -63,8 +80,8 @@ class ArgumentBuilder:
     inference_callable : Callable[[int, int], None]=None
     train_callable     : Callable[[float | optimizers.schedules.LearningRateSchedule, 
                                    float | optimizers.schedules.LearningRateSchedule, 
-                                   int, int, int, int], None]=None
-    load_callable      : Callable[[int, int], None]=None
+                                   int, int, int, int, bool], None]=None
+    load_callable      : Callable[[int, int, bool], None]=None
 
     def __init__(self, arguments):
         self.variables = arguments
@@ -119,8 +136,9 @@ class ArgumentBuilder:
                     _const_bounds_list[len(_const_bounds_list)//2:],
                     _const_values_list[len(_const_values_list)//2:]))
 
-        if not(hasattr(argument_builder, "_generator")) or \
-           not(hasattr(argument_builder, "_discriminator")):
+        if argument_builder.variables["trainable"] and(
+           not(hasattr(argument_builder, "_generator")) or \
+           not(hasattr(argument_builder, "_discriminator"))):
             raise ArgumentBuilderException(
                 "Learning Rate or Learning Rate Schedule is required.")
 
@@ -200,10 +218,10 @@ class ArgumentBuilder:
         if(self.train_callable != None):
             self.train_callable(self._generator, self._discriminator,
                 self.variables["batch_size"], self.variables["generate_per_epoch"],
-                self.variables["noise_vector"], self.variables["epochs"])
+                self.variables["noise_vector"], self.variables["epochs"], self.variables["no_augment"])
         elif(self.load_callable != None):
             self.load_callable(self.variables["generate_per_epoch"],
-                self.variables["epochs"])
+                self.variables["epochs"], self.variables["no_augment"])
         elif(self.inference_callable != None):
             self.inference_callable(self.variables["checkpoint"], 
                 self.variables["inference_count"])
@@ -249,6 +267,8 @@ def parse_arguments():
         help="Values at which the scheduler will adjust its learning rate at a given boundary X."
              "These arguments should be in non decreasing order and the arguments length must "
              "match exactly (or len + 1) the arguments provided by '--constant-decay-boundaries'.")
+    argument_parser.add_argument("--no-augment", action="store_true", dest="no_augment", 
+        help="Specifies if data augmentation should not be applied to dataset : defaults to false")
     namespace_obj = argument_parser.parse_args()
     var_dict      = vars(namespace_obj)
 
