@@ -30,8 +30,10 @@ class DiscriminatorModel(models.Model):
         self._conv_block_4 = ModelHelper.Conv2DBlockBuilder.construct(128, (3,3))
 
         self._flatten_layer = layers.Flatten()
-        self._dense_layer_1 = layers.Dense(8, activation='relu')
-        self._dense_layer_2 = layers.Dense(1, activation='sigmoid')
+        self._dense_layer_1 = layers.Dense(8, activation='relu', 
+            kernel_initializer='he_normal')
+        self._dense_layer_2 = layers.Dense(1, activation='sigmoid',
+            kernel_initializer='glorot_normal')
 
     def compute_loss(self, gen_images_output, real_images):
         real_images_true_value = tf.ones_like(real_images)

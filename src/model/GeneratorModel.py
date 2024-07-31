@@ -18,8 +18,10 @@ class GeneratorModel(models.Model):
         self._noise_vector_shape = i_shape
         self._higher_images_resolution = higher_images_resolution
         
-        self._dense_layer_1 = layers.Dense(64, activation='relu', input_shape=i_shape) 
-        self._dense_layer_2 = layers.Dense(512, activation='relu')
+        self._dense_layer_1 = layers.Dense(64, activation='relu', input_shape=i_shape,
+            kernel_initializer='he_normal') 
+        self._dense_layer_2 = layers.Dense(512, activation='relu', 
+            kernel_initializer='he_normal')
         self._reshape_layer_1 = layers.Reshape((8, 8, -1))
 
         self._conv_block_1 = ModelHelper.Conv2D_T_BlockBuilder.construct(128, (3,3))
@@ -29,7 +31,8 @@ class GeneratorModel(models.Model):
         if self._higher_images_resolution: # (128,128)
             self._conv_block_4 = ModelHelper.Conv2D_T_BlockBuilder.construct(16 , (3,3))
         
-        self._conv_layer_1 = layers.Conv2D(3, (1,1), activation='sigmoid')
+        self._conv_layer_1 = layers.Conv2D(3, (1,1), activation='sigmoid',
+            kernel_initializer='glorot_normal')
 
     def compute_loss(self, gen_images_output):
         fake_images_true_value = tf.ones_like(gen_images_output)
