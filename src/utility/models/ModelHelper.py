@@ -7,12 +7,14 @@ class Conv2DBlockBuilder:
     def construct(filters:int, kernel_size:tuple[int, int], i_shape:int|None=None) -> list[layers.Layer]:
         block = []
         if i_shape == None:
-            block.append(layers.Conv2D(filters, kernel_size, padding='same', activation='relu'))
+            block.append(layers.Conv2D(filters, kernel_size, padding='same', activation='relu',
+                kernel_initializer='he_normal'))
         else:
-            block.append(layers.Conv2D(filters, kernel_size, padding='same', activation='relu', 
-                                       input_shape=i_shape))
+            block.append(layers.Conv2D(filters, kernel_size, padding='same', activation='relu',
+                kernel_initializer='he_normal', input_shape=i_shape))
         block.append(layers.BatchNormalization())
-        block.append(layers.Conv2D(filters, kernel_size, padding='same', activation='relu'))
+        block.append(layers.Conv2D(filters, kernel_size, padding='same', activation='relu',
+            kernel_initializer='he_normal'))
         block.append(layers.BatchNormalization())
 
         return block
