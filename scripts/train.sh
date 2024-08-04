@@ -190,4 +190,4 @@ CMD="${ENTRY} ${CMD}"
 
 printf "$CMD\n"
 
-#eval "${CMD}"
+eval "${CMD}"
