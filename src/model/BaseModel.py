@@ -10,6 +10,7 @@ from os import path
 from utility.dataset import ImageProvider as img_provider
 from keras import optimizers
 from keras import export
+from utility.enums.defs import ImageResolutionOps
 
 @saving.register_keras_serializable(package="Model", name="Base")
 class BaseModel(models.Model):
@@ -18,6 +19,7 @@ class BaseModel(models.Model):
                  d_learning_rate : float | optimizers.schedules.LearningRateSchedule,
                  noise_vector, batch_size, d_input):
         super().__init__()
+        ImageResolutionOps.loc_range(d_input[:2])
         self._generator_model = gen_model.GeneratorModel(noise_vector, g_learning_rate)
         self._discriminator_model = disc_model.DiscriminatorModel(d_input, d_learning_rate)
         self._batch_size = batch_size
@@ -119,9 +121,10 @@ class BaseModel(models.Model):
 
         image_provider = img_provider.ImageProvider.build_from_dataset(
             self._batch_size, dataset)
+        img_h, img_w, _ = image_provider.provide_image_dim()
         checkpoint_callback1 = ckpt_callback.CheckpointCallback()
         checkpoint_callback2 = callbacks.ModelCheckpoint(
-            path.join("ckpt", "model", "model.keras"),
+            path.join("ckpt", "model", f"model_tgt_{img_h}-{img_w}.keras"),
             save_freq='epoch', save_weights_only=False) # saving whole model
         generator_callback = gen_callback.GeneratorCallback(
             image_provider, generate_images_per_epoch)
@@ -204,12 +207,14 @@ class BaseModel(models.Model):
 
     def export(self):
         gen_dict  = self.generator
+        img_shape = self.discriminator["d_input"]
         ex_arch = export.ExportArchive()
         ex_arch.track(self._generator_model)
         ex_arch.add_endpoint("inference", self._generator_model.call,
             input_signature=[tf.TensorSpec(
                 shape=(None, gen_dict["noise_vector"]), dtype=tf.float32)])
-        ex_arch.write_out(path.join("ckpt", "model", "model-inference"))
+        ex_arch.write_out(path.join("ckpt", "model", "inference", 
+            f"inf_v_{img_shape[0]}-{img_shape[1]}"))
 
     @property
     def batch_size(self):
@@ -227,5 +232,4 @@ class BaseModel(models.Model):
         return {
             "noise_vector" : self._generator_model.noise_vector_shape,
             "learning_rate" : self._generator_model.learning_rate,
-            "image_higher_res" : self._generator_model.image_higher_resolution
         }
