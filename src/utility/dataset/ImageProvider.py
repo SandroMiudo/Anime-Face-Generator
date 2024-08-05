@@ -4,11 +4,12 @@ from tensorflow import dtypes
 from tensorflow import image
 from tensorflow import random
 from ..plot import ImagePlotter as img_plt
+import warnings
 
 class ImageProvider:
 
-    _IMG_HEIGHT = 128
-    _IMG_WIDTH  = 128
+    _IMG_HEIGHT = 0
+    _IMG_WIDTH  = 0
 
     @staticmethod
     def normalize_image_zero_to_one(img):
@@ -43,7 +44,7 @@ class ImageProvider:
     def build_from_dataset(cls, batch_size, dataset):
         return cls(batch_size=batch_size, dataset=dataset)
 
-    def __init__(self, batch_size=32, should_cache=False, shuffle_buffer=15000, 
+    def __init__(self, batch_size=32, should_cache=True, shuffle_buffer=15000, 
                  dataset=None, debug_mode=False, no_augment=False) -> None:
         if(dataset != None):
             self.dataset = dataset
@@ -51,9 +52,11 @@ class ImageProvider:
             return
 
         if(batch_size < 8):
-            Warning("Batch size shouldn't be set to low.")
-        if(batch_size > 128 or batch_size < 2):
-            print(f"Batch size has to be in range : [2-128], but received {batch_size}")
+            warnings.warn("Batch size shouldn't be set too low.")
+
+        if(batch_size > 256):
+            warnings.warn("Batch size shouldn't be set too high.")
+            
         dataset = data.Dataset.list_files("dataset/*")
         self.dataset = dataset
         self.batch_size = batch_size
@@ -75,7 +78,7 @@ class ImageProvider:
             self.augment()
             print(f"{self.dataset.cardinality()} Images after augmentation --\n")
         print(f"Shuffling images using a buffer size of {shuffle_buffer} -- random order\n")
-        self.dataset = self.dataset.shuffle(shuffle_buffer)
+        self.dataset = self.dataset.shuffle(shuffle_buffer, reshuffle_each_iteration=False)
         print(f"Creating batches of size {batch_size} --\n")
         self.dataset = self.dataset.batch(batch_size, drop_remainder=True)
         if(should_cache):
