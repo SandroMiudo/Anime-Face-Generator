@@ -11,8 +11,8 @@ class DiagramPlotter(pl.Plotter):
 
     def plot(self):
         epochs = self._history.epoch
-        d_loss = self._history.history["gen_loss"]
-        g_loss = self._history.history["disc_loss"]
+        g_loss = self._history.history["gen_loss"]
+        d_loss = self._history.history["disc_loss"]
 
         self.axes[0,0].axis('on')
         self.axes[0,0].set_xlim(0, len(epochs))
