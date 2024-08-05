@@ -27,6 +27,10 @@
 
 # B,1 , B,2 , B,3
 
+# predefined resolution :
+
+# R,1 , R,2 , R,3
+
 # example usage : 
 
 ################################
@@ -49,6 +53,8 @@ readonly NOISE_V=\
 "--noise-vector"
 readonly LEARNING=\
 "--learning-rate"
+readonly RESOLUTION=\
+"--target"
 
 readonly LEVEL_1=1
 readonly LEVEL_2=2
@@ -59,6 +65,7 @@ readonly NOISE="N"
 readonly EPOCH="E"
 readonly LEARN="LR"
 readonly DECAY="D"
+readonly RES="R"
 
 readonly DECAY_P_LEVEL_1="${DECAY_P} 0.0004 100000 0.0001 1.0"
 readonly DECAY_P_LEVEL_2="${DECAY_P} 0.0004 100000 0.0001 0.75"
@@ -90,6 +97,10 @@ readonly NOISE_V_LEVEL_3="${NOISE_V} 128"
 readonly BATCH_S_LEVEL_1="${BATCH_S} 64"
 readonly BATCH_S_LEVEL_2="${BATCH_S} 128"
 readonly BATCH_S_LEVEL_3="${BATCH_S} 256"
+
+readonly RES_LEVEL_1="${RESOLUTION} 64"
+readonly RES_LEVEL_2="${RESOLUTION} 96"
+readonly RES_LEVEL_3="${RESOLUTION} 128"
 
 readonly S_LEVEL_1="${DECAY_C_LEVEL_1} ${EPOCHS_LEVEL_1} ${NOISE_V_LEVEL_1} ${BATCH_S_LEVEL_3}"
 readonly S_LEVEL_2="${DECAY_C_LEVEL_1} ${EPOCHS_LEVEL_2} ${NOISE_V_LEVEL_1} ${BATCH_S_LEVEL_3}"
@@ -149,6 +160,11 @@ parse_args () {
         [ "${active_decay}" = "P" ] && [ "${active_level}" -eq ${LEVEL_2} ] && CMD="${CMD} ${DECAY_P_LEVEL_2}"
         [ "${active_decay}" = "P" ] && [ "${active_level}" -eq ${LEVEL_3} ] && CMD="${CMD} ${DECAY_P_LEVEL_3}"
         ;;
+      "${RES}")
+        [ ${active_level} -eq ${LEVEL_1} ] && CMD="${CMD} ${RES_LEVEL_1}"  
+        [ ${active_level} -eq ${LEVEL_2} ] && CMD="${CMD} ${RES_LEVEL_2}"
+        [ ${active_level} -eq ${LEVEL_3} ] && CMD="${CMD} ${RES_LEVEL_3}"
+        ;;
       "L" )
         [ "${active_level}" -eq ${LEVEL_1} ] && CMD="${CMD} ${L_LEVEL_1}"
         [ "${active_level}" -eq ${LEVEL_2} ] && CMD="${CMD} ${L_LEVEL_2}"
@@ -177,7 +193,8 @@ print_help () {
 # predefined learning rates : LR,1, LR,2 , LR,3\n\
 # predefined epochs : E,1, E,2 , E,3\n\
 # predefined noise vectors : N,1 , N,2 , N,3\n\
-# predefined batch size : B,1 , B,2 , B,3\n"
+# predefined batch size : B,1 , B,2 , B,3\n\
+# predefined resolutions : R,1, R,2 , R,3\n"
 }
 
 [ $# -eq 0 ] && exit 1
