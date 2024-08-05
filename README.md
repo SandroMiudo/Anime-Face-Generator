@@ -128,7 +128,3 @@ In this build it is required to specify in the `--constant-decay` option, if the
 ```
 
 ## Showcase
-
-```shell
-python3 ENTRY --exponential-decay 0.0001 3000 0.8 --noise-vector 128 --batch-size 256 --no-augment --epochs 30
-```
