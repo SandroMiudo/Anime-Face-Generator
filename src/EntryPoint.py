@@ -11,6 +11,7 @@ import warnings
 from utility.plot import ImagePlotter as img_plt
 from tensorflow import saved_model
 from numpy import random
+from utility.enums.defs import ImageResolution
 
 def print_routine_string(routine:str, **kwargs):
     print(routine, end=' : ')
@@ -18,7 +19,7 @@ def print_routine_string(routine:str, **kwargs):
         print(v1, v2, sep=" - ", end=' | ')
     print(end='\n')
 
-def inference(ckpt, inference_count):
+def inference(ckpt, inference_count, target:list[int, int]):
     if(ckpt <= 0):
         raise InferenceException("checkpoint must be in the range [1,*]")
     if(inference_count <= 0):
@@ -26,7 +27,8 @@ def inference(ckpt, inference_count):
     files_present = os.listdir(os.path.join("ckpt", "weights"))
     if(ckpt > len(files_present)):
         raise InferenceException("checkpoint is not present!")
-    artifact = saved_model.load(os.path.join("ckpt", "model", "model-inference"))
+    artifact = saved_model.load(os.path.join("ckpt", "model", "inference",
+        f"inf_v_{target[0]}-{target[1]}"))
     noise_vectors = random.normal(0, 1, 
         (inference_count, artifact.signatures["inference"].inputs[0].shape[1]))
     generated_images = artifact.inference(noise_vectors)
@@ -51,7 +53,7 @@ def fit(model:base_model.BaseModel, dataset, epochs, generate_images_per_epoch) 
 def train(g_learning_rate : float | optimizers.schedules.LearningRateSchedule, 
           d_learning_rate : float | optimizers.schedules.LearningRateSchedule, 
           batch_size, generate_images_per_epoch, noise_vector, epochs,
-          no_augment):
+          no_augment, target: list[int, int]):
     if(isinstance(g_learning_rate, float) and 
        (g_learning_rate <= 0 or d_learning_rate <= 0)):
         raise Exception(
@@ -60,6 +62,9 @@ def train(g_learning_rate : float | optimizers.schedules.LearningRateSchedule,
         discriminator_learning_rate=d_learning_rate, batch_size=batch_size, 
         generated_images_per_epoch=generate_images_per_epoch, noise_vector=noise_vector,
         epochs=epochs)
+    
+    img_provider.ImageProvider._set_height(target[0])
+    img_provider.ImageProvider._set_width(target[1])
     provider = img_provider.ImageProvider(batch_size=batch_size, no_augment=no_augment)
     dataset, batch_size = provider.provide_images()
     input_shape = provider.provide_image_dim()
@@ -68,20 +73,22 @@ def train(g_learning_rate : float | optimizers.schedules.LearningRateSchedule,
 
     fit(b_model, dataset, epochs, generate_images_per_epoch)
 
-def load(generate_images_per_epoch, epochs, no_augment):
-    model_file = os.path.join("ckpt", "model", "model.keras")
+def load(generate_images_per_epoch, epochs, no_augment, target:list[int, int]):
+    model_file = os.path.join("ckpt", "model", f"model_tgt_{target[0]}-{target[1]}.keras")
     model = keras.models.load_model(model_file)
-    batch_size = model.batch_size 
+    batch_size = model.batch_size
+    img_provider.ImageProvider._set_height(target[0])
+    img_provider.ImageProvider._set_width(target[1])
     provider = img_provider.ImageProvider(batch_size, no_augment=no_augment)
     dataset, _ = provider.provide_images()
     fit(model, dataset, epochs, generate_images_per_epoch)
     
 class ArgumentBuilder:
-    inference_callable : Callable[[int, int], None]=None
+    inference_callable : Callable[[int, int, list[int, int]], None]=None
     train_callable     : Callable[[float | optimizers.schedules.LearningRateSchedule, 
                                    float | optimizers.schedules.LearningRateSchedule, 
-                                   int, int, int, int, bool], None]=None
-    load_callable      : Callable[[int, int, bool], None]=None
+                                   int, int, int, int, bool, list[int, int]], None]=None
+    load_callable      : Callable[[int, int, bool, list[int, int]], None]=None
 
     def __init__(self, arguments):
         self.variables = arguments
@@ -98,6 +105,10 @@ class ArgumentBuilder:
         else:
             raise ArgumentBuilderException(
                 "base argument has to be provided!")
+
+        if not argument_builder.valid_resolutions():
+            raise ArgumentBuilderException(
+                "target resolution not supported!")
 
         if argument_builder.valid_learning_arguments("learning_rate", [1,2],
             "1 or 2 learning rates expected, but received %d arguments."):
@@ -186,6 +197,17 @@ class ArgumentBuilder:
             return True
         return False
 
+    def valid_resolutions(self): # currently not using 32x32
+        self.variables["target"] = self.variables["target"] * 2
+        _tgt = self.variables["target"]
+        if _tgt == ImageResolution.x_64_64.value or _tgt == ImageResolution.x_128_128.value \
+            or _tgt == ImageResolution.x_256_256.value or _tgt == ImageResolution.x_512_512.value \
+            or _tgt == ImageResolution.x_48_48.value or _tgt == ImageResolution.x_96_96.value \
+            or _tgt == ImageResolution.x_56_56.value or _tgt == ImageResolution.x_112_112.value: 
+            return True
+        
+        return False
+
     def in_range(self, search_entry : str, search_entry_2 : str, i : int):
         return (len(self.variables[search_entry]) - i) > len(self.variables[search_entry_2]) 
 
@@ -218,13 +240,15 @@ class ArgumentBuilder:
         if(self.train_callable != None):
             self.train_callable(self._generator, self._discriminator,
                 self.variables["batch_size"], self.variables["generate_per_epoch"],
-                self.variables["noise_vector"], self.variables["epochs"], self.variables["no_augment"])
+                self.variables["noise_vector"], self.variables["epochs"], 
+                self.variables["no_augment"], self.variables["target"])
         elif(self.load_callable != None):
             self.load_callable(self.variables["generate_per_epoch"],
-                self.variables["epochs"], self.variables["no_augment"])
+                self.variables["epochs"], self.variables["no_augment"],
+                self.variables["target"])
         elif(self.inference_callable != None):
             self.inference_callable(self.variables["checkpoint"], 
-                self.variables["inference_count"])
+                self.variables["inference_count"], self.variables["target"])
     
 def parse_arguments():
     argument_parser = argparse.ArgumentParser()
@@ -269,6 +293,9 @@ def parse_arguments():
              "match exactly (or len + 1) the arguments provided by '--constant-decay-boundaries'.")
     argument_parser.add_argument("--no-augment", action="store_true", dest="no_augment", 
         help="Specifies if data augmentation should not be applied to dataset : defaults to false")
+    argument_parser.add_argument("--target", nargs=1, help="Defines target spatial dimension"
+                                 "Avaiblable targets : 64, 128, 256, 512",
+        default=64, type=int, dest="target")
     namespace_obj = argument_parser.parse_args()
     var_dict      = vars(namespace_obj)
 
