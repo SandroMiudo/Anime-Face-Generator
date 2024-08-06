@@ -51,7 +51,7 @@ class DiscriminatorModel(models.Model):
         return self._bin_loss(real_images_true_value, real_images) + self._bin_loss(fake_images_true_value, gen_images_output)
 
     def call(self, inputs, training=None):
-        _noise = tf.random.normal(list(inputs.shape), 0, 0.2) # potentialy increase this to 0.15 - 0.2
+        _noise = tf.random.normal(list(inputs.shape), 0, 0.1) # potentialy increase this to 0.15 - 0.2
         inputs = tf.clip_by_value(inputs + _noise, 0.0, 1.0)
 
         x = LayerIterator(self._conv_block_1)(inputs, training)

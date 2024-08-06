@@ -13,6 +13,8 @@ from tensorflow import saved_model
 from numpy import random
 from utility.enums.defs import ImageResolution
 
+SAVE_K_IMG = 4
+
 def print_routine_string(routine:str, **kwargs):
     print(routine, end=' : ')
     for v1,v2 in kwargs.items():
@@ -36,6 +38,8 @@ def inference(ckpt, inference_count, target:list[int, int]):
     for i in range(inference_count):
         image_plotter = img_plt.ImagePlotter(None, (1, 1))
         image_plotter.plot_from_image(generated_images[i])
+        if i < SAVE_K_IMG:
+            image_plotter.save(os.path.join("media", f"generation", f"inf-{i+1}-target-{target[0]}.jpg"))
 
 def fit(model:base_model.BaseModel, dataset, epochs, generate_images_per_epoch) -> None:
     history = model.fit(dataset, generate_images_per_epoch, epochs)
@@ -295,7 +299,7 @@ def parse_arguments():
         help="Specifies if data augmentation should not be applied to dataset : defaults to false")
     argument_parser.add_argument("--target", nargs=1, help="Defines target spatial dimension"
                                  "Avaiblable targets : 64, 128, 256, 512",
-        default=64, type=int, dest="target")
+        default=[64], type=int, dest="target")
     namespace_obj = argument_parser.parse_args()
     var_dict      = vars(namespace_obj)
 
