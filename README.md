@@ -1,14 +1,7 @@
 # Generative Anime Face Model
 This project focusses on training a generative model, to generate realistic anime faces.
 
-This model is trained on 65k anime face images.
-
 ![Training Data](media/images.png)
-
-## Model architecture
-
-To view the current architecture of the model, you can just check the
-[model summary](media/model_summary.txt).
 
 ## Prerequisites
 
@@ -34,6 +27,16 @@ To load the model, including its state, parameters and more just refer to this [
 
 If you are just interested in generating images, refer to the [inference](#inference) sub-section.
 
+**Available targets:**
+- **Seq-1:**
+    - [64, 128, 256, 512]
+- **Seq-2:**
+    - [48, 96]
+- **Seq-3:**
+    - [56, 112]
+
+**The default target is 64! Meaning that if you want to have a different target, make sure to specifiy the desired target.**
+
 ### Train
 
 If the **train routine** is the desired routine, it is required to specify `--train` when invoking the script.
@@ -41,7 +44,7 @@ If the **train routine** is the desired routine, it is required to specify `--tr
 In this training section we'll just cover the basic parameters that can be used.
 
 ```shell
-ENTRY --train [--epochs EPOCHS] [--batch-size B_SIZE] [--noise-vector N_VECTOR] [--generate-per-epoch N] [--learning-rate A[, B]] [--no-augment]
+ENTRY --train [--epochs EPOCHS] [--batch-size B_SIZE] [--noise-vector N_VECTOR] [--generate-per-epoch N] [--learning-rate A[, B]] [--no-augment] [--target X]
 ```
 
 A different approach is just executing the train script. The easiest way of executing this script, would just be to pass in `S, M or L` with its corresponding level `{1..3}`. This will generate the final command on the fly, abstracting away the inner arguments.
@@ -60,13 +63,13 @@ Gathering more information about the prior script invocation ? No problem just u
 Specify `--load` to indicate that the **loading routine** is the desired routine.
 
 ```shell
-ENTRY --load [--epochs N] [--generate-per-epoch K] [--no-augment]
+ENTRY --load [--epochs N] [--generate-per-epoch K] [--no-augment] [--target X]
 ```
 
-If you don't want to write out the options every time, just consider using the load script, which takes in 3 arguments. `$1` = **generated images per epoch**(1-n), `$2` = **epochs**(1-n) and `$3` = **no data augmentation**(0=no, 1=yes).
+If you don't want to write out the options every time, just consider using the load script, which takes in 3 arguments, or optionally 4 arguments.
 
 ```shell
-LOAD 5 30 1
+LOAD <generate-images> <epochs> <no-augment> [target]
 ```
 
 ### Inference
@@ -74,13 +77,13 @@ LOAD 5 30 1
 Using `--inference` signals the **last** of the three routines.
 
 ```shell
-ENTRY --inference [--inference-count N]
+ENTRY --inference [--inference-count N] [--target X]
 ```
 
-or optionally there is also an inference script, which can be executed by just passing in the amount of images to generate.
+Optionally there is also an inference script, which can be executed by just passing in the amount of images to generate (or by passing in the target as well).
 
 ```shell
-INF 5
+INF <inference_count> [target]
 ```
 
 ### Using learning rate schedulers
@@ -128,3 +131,59 @@ In this build it is required to specify in the `--constant-decay` option, if the
 ```
 
 ## Showcase
+
+Currently there are 3 (which can be extended) total models at disposal (Targets : 56, 64 & 96).
+
+**Important note : These models were not trained with the best available options, but instead use a configuration for the lowest possible execution time! Meaning for those, who desire better performance on a specific target, might want to train it with a custom configuration using this [train-doc](#train) as reference point.**
+
+### Target 56
+
+<table style="margin-left: auto; margin-right: auto">
+    <tr>
+        <td><img src="media/generation/inf-1-target-56.jpg" width="450px"></td>
+        <td><img src="media/generation/inf-2-target-56.jpg" width="450px"></td>
+    </tr>
+    <tr>
+        <td><img src="media/generation/inf-3-target-56.jpg" width="450px"></td>
+        <td><img src="media/generation/inf-4-target-56.jpg" width="450px"></td>
+    </tr>
+</table>
+
+### Target 64
+
+<table style="margin-left: auto; margin-right: auto">
+    <tr>
+        <td><img src="media/generation/inf-1-target-64.jpg" width="450px"></td>
+        <td><img src="media/generation/inf-2-target-64.jpg" width="450px"></td>
+    </tr>
+    <tr>
+        <td><img src="media/generation/inf-3-target-64.jpg" width="450px"></td>
+        <td><img src="media/generation/inf-4-target-64.jpg" width="450px"></td>
+    </tr>
+</table>
+
+### Target 96
+
+<table style="margin-left: auto; margin-right: auto">
+    <tr>
+        <td><img src="media/generation/inf-1-target-96.jpg" width="450px"></td>
+        <td><img src="media/generation/inf-2-target-96.jpg" width="450px"></td>
+    </tr>
+    <tr>
+        <td><img src="media/generation/inf-3-target-96.jpg" width="450px"></td>
+        <td><img src="media/generation/inf-4-target-96.jpg" width="450px"></td>
+    </tr>
+</table>
+
+### Target 128
+
+<table style="margin-left: auto; margin-right: auto">
+    <tr>
+        <td><img src="media/generation/inf-1-target-128.jpg" width="450px"></td>
+        <td><img src="media/generation/inf-2-target-128.jpg" width="450px"></td>
+    </tr>
+    <tr>
+        <td><img src="media/generation/inf-3-target-128.jpg" width="450px"></td>
+        <td><img src="media/generation/inf-4-target-128.jpg" width="450px"></td>
+    </tr>
+</table>
